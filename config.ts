@@ -1,15 +1,14 @@
 
 // === 服务器配置 ===
 
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// 根据你的日志，我已经将这里预设为你刚才访问的 IP 地址
-// 如果你的服务器 IP 变了，请手动修改这里
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// 你的阿里云服务器公网 IP
 export const SERVER_HOST = 'localhost'; 
 
 export const SERVER_PORT = 8080;
 
 export const getWsUrl = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  // 如果是本地开发 (localhost)，依然尝试连接远程服务器
+  // 如果是在服务器上访问，直接使用当前 host
   return `${protocol}//${SERVER_HOST}:${SERVER_PORT}`;
 };
