@@ -5,7 +5,6 @@ import logging
 import sys
 from datetime import datetime
 
-# 导入自定义模块
 import database
 import crypto_utils
 import paillier_service
@@ -16,7 +15,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging. FileHandler('backend.log')
+        logging. FileHandler('backend. log')
     ]
 )
 logger = logging.getLogger(__name__)
@@ -35,32 +34,14 @@ paillier_service. init_paillier_keys(2048)
 paillier_service. start_key_rotation(key_size=2048, interval=5*60)
 logger.info("Paillier 密钥系统初始化完成")
 
-# 存储所有连接的客户端（用于广播密钥更新通知）
+# 存储所有连接的客户端
 connected_clients = set()
-
-async def broadcast_key_update():
-    """
-    广播密钥更新通知给所有连接的客户端
-    """
-    if connected_clients:
-        key_data = paillier_service. get_public_key_with_info()
-        message = json.dumps({
-            'type': 'KEY_ROTATED',
-            **key_data
-        })
-        
-        await asyncio.gather(
-            *[client. send(message) for client in connected_clients],
-            return_exceptions=True
-        )
-        logger.info(f"已向 {len(connected_clients)} 个客户端广播密钥更新")
 
 async def handler(websocket):
     client_addr = websocket.remote_address
     logger.info(f"新连接: {client_addr}")
     
-    # 添加到连接列表
-    connected_clients. add(websocket)
+    connected_clients.add(websocket)
     
     try:
         async for message in websocket:
@@ -68,7 +49,7 @@ async def handler(websocket):
                 data = json.loads(message)
                 msg_type = data. get('type')
 
-                # === 功能 1: 安全聊天 (Diffie-Hellman + AES) ===
+                # === 安全聊天 ===
                 
                 if msg_type == 'HANDSHAKE_INIT':
                     client_pub = data.get('publicKey')
@@ -99,7 +80,7 @@ async def handler(websocket):
                         database.save_message("Alice", content_enc, iv)
                         
                         reply_text = f"Server收到: {plaintext} (From Python)"
-                        encrypted_reply = crypto_manager. encrypt_reply(websocket, reply_text)
+                        encrypted_reply = crypto_manager.encrypt_reply(websocket, reply_text)
                         
                         await websocket.send(json. dumps({
                             'type': 'CHAT_REPLY',
@@ -110,9 +91,8 @@ async def handler(websocket):
                     except Exception as e:
                         logger. error(f"解密或回复失败: {e}")
 
-                # === 功能 2: 隐私计算 (Paillier) ===
+                # === 隐私计算 ===
                 
-                # 获取系统时间
                 elif msg_type == 'GET_SERVER_TIME':
                     now = datetime.now()
                     await websocket.send(json.dumps({
@@ -121,18 +101,16 @@ async def handler(websocket):
                         'timestamp': now.timestamp()
                     }))
 
-                # 获取服务端公钥和时间信息
                 elif msg_type == 'GET_PAILLIER_KEY':
                     logger.info("前端请求 Paillier 公钥")
-                    key_data = paillier_service.get_public_key_with_info()
+                    key_data = paillier_service. get_public_key_with_info()
                     
                     await websocket.send(json. dumps({
                         'type': 'PAILLIER_KEY',
                         **key_data
                     }))
-                    logger.info("已发送 Paillier 公钥和时间信息")
+                    logger.info("已发送 Paillier 公钥")
 
-                # 获取密钥状态信息
                 elif msg_type == 'GET_KEY_STATUS':
                     key_info = paillier_service.get_key_info()
                     
@@ -141,20 +119,18 @@ async def handler(websocket):
                         'key_info': key_info
                     }))
 
-                # 请求服务端加密
                 elif msg_type == 'ENCRYPT_VALUE':
                     value = data.get('value')
                     logger.info(f"收到加密请求: {value}")
                     
-                    ciphertext = paillier_service. encrypt_value(int(value))
+                    ciphertext = paillier_service.encrypt_value(int(value))
                     
                     await websocket.send(json.dumps({
                         'type': 'ENCRYPTED_VALUE',
                         'ciphertext': ciphertext,
-                        'original': value
+                        'original': str(value)
                     }))
 
-                # 请求服务端解密
                 elif msg_type == 'DECRYPT_VALUE':
                     ciphertext = data.get('ciphertext')
                     logger.info("收到解密请求")
@@ -171,26 +147,24 @@ async def handler(websocket):
                             'error': str(e)
                         }))
 
-                # 同态计算（使用前端公钥 - 兼容旧模式）
                 elif msg_type == 'COMPUTE_SUM':
                     logger.info("收到同态计算请求")
                     pub_key = data.get('pub_key')
                     values = data.get('values')
                     
-                    result_cipher = paillier_service. compute_homomorphic_sum(
+                    result_cipher = paillier_service.compute_homomorphic_sum(
                         pub_key['n'], 
                         pub_key['g'], 
                         values
                     )
                     
-                    logger.info(f"计算完成")
+                    logger.info("计算完成")
                     
-                    await websocket. send(json.dumps({
+                    await websocket.send(json.dumps({
                         'type': 'COMPUTE_RESULT',
                         'result': result_cipher
                     }))
 
-                # 同态计算（使用服务端密钥 - 新模式）
                 elif msg_type == 'COMPUTE_SUM_SERVER_KEY':
                     logger.info("收到同态计算请求（服务端密钥）")
                     ciphertexts = data.get('values')
@@ -231,7 +205,7 @@ async def main():
     logger.info("监听端口: 8080 (0.0.0. 0)")
     
     try:
-        async with websockets.serve(handler, "0.0.0. 0", 8080):
+        async with websockets.serve(handler, "0. 0.0.0", 8080):
             await asyncio.Future()
     except Exception as e:
         logger.critical(f"服务器启动失败: {e}")
