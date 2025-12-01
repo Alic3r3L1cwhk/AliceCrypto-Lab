@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { splitSecret, recoverSecret, Share } from '../lib/shamir';
-import { socketSim } from '../lib/socketSim';
+import { splitSecret, recoverSecret, Share } from './lib/shamir';
+import { socketSim } from './lib/socketSim';
 
 const MPC: React.FC = () => {
     const [mode, setMode] = useState<'shamir' | 'compare'>('shamir');
@@ -86,13 +86,13 @@ const MPC: React.FC = () => {
     return (
         <div className="space-y-6">
             <div className="flex gap-4 border-b border-cyber-700 pb-4">
-                <button 
+                <button
                     onClick={() => setMode('shamir')}
                     className={`px-4 py-2 rounded font-bold transition-colors ${mode === 'shamir' ? 'bg-cyber-purple text-cyber-900' : 'text-gray-400 hover:text-white'}`}
                 >
                     Shamir 秘密分享
                 </button>
-                <button 
+                <button
                     onClick={() => setMode('compare')}
                     className={`px-4 py-2 rounded font-bold transition-colors ${mode === 'compare' ? 'bg-cyber-purple text-cyber-900' : 'text-gray-400 hover:text-white'}`}
                 >
@@ -107,16 +107,16 @@ const MPC: React.FC = () => {
                         <div className="space-y-4">
                             <div>
                                 <label className="text-xs text-gray-400 block mb-1">秘密值 (整数)</label>
-                                <input type="number" value={secret} onChange={e=>setSecret(parseInt(e.target.value))} className="w-full bg-cyber-900 border border-cyber-600 rounded px-3 py-2 text-white" />
+                                <input type="number" value={secret} onChange={e => setSecret(parseInt(e.target.value))} className="w-full bg-cyber-900 border border-cyber-600 rounded px-3 py-2 text-white" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs text-gray-400 block mb-1">总份数 (n)</label>
-                                    <input type="number" value={partsN} onChange={e=>setPartsN(parseInt(e.target.value))} className="w-full bg-cyber-900 border border-cyber-600 rounded px-3 py-2 text-white" />
+                                    <input type="number" value={partsN} onChange={e => setPartsN(parseInt(e.target.value))} className="w-full bg-cyber-900 border border-cyber-600 rounded px-3 py-2 text-white" />
                                 </div>
                                 <div>
                                     <label className="text-xs text-gray-400 block mb-1">恢复门限 (t)</label>
-                                    <input type="number" value={thresholdT} onChange={e=>setThresholdT(parseInt(e.target.value))} className="w-full bg-cyber-900 border border-cyber-600 rounded px-3 py-2 text-white" />
+                                    <input type="number" value={thresholdT} onChange={e => setThresholdT(parseInt(e.target.value))} className="w-full bg-cyber-900 border border-cyber-600 rounded px-3 py-2 text-white" />
                                 </div>
                             </div>
                             <button onClick={handleSplit} className="w-full bg-cyber-purple text-cyber-900 font-bold py-2 rounded hover:bg-white transition-colors">
@@ -131,8 +131,8 @@ const MPC: React.FC = () => {
                             <div className="text-sm text-gray-400">至少选择 {thresholdT} 个碎片进行恢复:</div>
                             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                                 {shares.map((s) => (
-                                    <div 
-                                        key={s.x} 
+                                    <div
+                                        key={s.x}
                                         onClick={() => toggleShare(s.x)}
                                         className={`p-2 rounded cursor-pointer border ${selectedShares.includes(s.x) ? 'bg-cyber-purple/20 border-cyber-purple text-white' : 'bg-cyber-900 border-cyber-700 text-gray-500'}`}
                                     >
@@ -159,16 +159,16 @@ const MPC: React.FC = () => {
                 <div className="bg-cyber-800 p-8 rounded border border-cyber-700 max-w-2xl mx-auto">
                     <h3 className="text-xl font-bold text-white mb-2 text-center">安全比对协议 (Secure Comparison)</h3>
                     <p className="text-gray-400 text-sm text-center mb-8">比较 Alice (x) 和 Bob (y) 的大小，且不泄露具体数值。</p>
-                    
+
                     <div className="flex justify-between items-center mb-8 relative">
                         {/* Alice */}
                         <div className="text-center w-1/3">
                             <div className="text-cyber-accent font-bold mb-2">Alice (你)</div>
-                            <input 
-                                type="number" 
-                                placeholder="数值 A" 
+                            <input
+                                type="number"
+                                placeholder="数值 A"
                                 value={myWealth}
-                                onChange={e=>setMyWealth(parseInt(e.target.value))}
+                                onChange={e => setMyWealth(parseInt(e.target.value))}
                                 className="w-full bg-cyber-900 border border-cyber-600 p-2 rounded text-center text-white"
                             />
                         </div>
@@ -192,7 +192,7 @@ const MPC: React.FC = () => {
                     </div>
 
                     <div className="text-center">
-                        <button 
+                        <button
                             onClick={startCompare}
                             disabled={!serverSecretGenerated || isComparing}
                             className="bg-gradient-to-r from-cyber-accent to-cyber-purple text-cyber-900 font-bold px-8 py-3 rounded-full shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:scale-100"
