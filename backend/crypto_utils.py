@@ -1,14 +1,13 @@
 import base64
 import os
-from cryptography.hazmat. primitives.asymmetric import ec
-from cryptography. hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat. primitives.ciphers. aead import AESGCM
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat. primitives.kdf. hkdf import HKDF
+from cryptography.hazmat.primitives.ciphers. aead import AESGCM
 
 class CryptoManager:
     def __init__(self):
-        # 存储每个客户端连接的密钥信息
-        self. client_sessions = {}
+        self.client_sessions = {}
 
     def _generate_keypair(self):
         """为每个连接生成新的临时 ECDH 密钥对"""
