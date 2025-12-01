@@ -28,6 +28,7 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+// Paillier 密钥信息
 export interface KeyInfo {
   generated_at: string;
   generated_at_timestamp: number;
@@ -42,9 +43,4 @@ export interface KeyInfo {
 export interface ServerPublicKey {
   n: string;
   g: string;
-}
-
-export interface PaillierKeyData {
-  pub_key: ServerPublicKey;
-  key_info: KeyInfo;
 }
