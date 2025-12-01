@@ -22,70 +22,74 @@ const PrivacyComputing: React.FC = () => {
   const [decryptedSum, setDecryptedSum] = useState<number | null>(null);
   const [processing, setProcessing] = useState(false);
   
-  // 服务端密钥相关状态
   const [serverPubKey, setServerPubKey] = useState<ServerPublicKey | null>(null);
   const [keyInfo, setKeyInfo] = useState<KeyInfo | null>(null);
   const [countdown, setCountdown] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [keyLoading, setKeyLoading] = useState(true);
-  const [useServerKey, setUseServerKey] = useState(true); // 是否使用服务端密钥
+  const [useServerKey, setUseServerKey] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
 
-  // 格式化倒计时
   const formatCountdown = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString(). padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins. toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // 请求服务端公钥
   const fetchServerKey = useCallback(async () => {
     setKeyLoading(true);
     try {
-      await socketSim. connect();
+      await socketSim.connect();
+      setIsConnected(true);
       socketSim.send({ type: 'GET_PAILLIER_KEY' });
       socketSim.log('CLIENT', '请求服务端 Paillier 公钥', 'INFO');
     } catch (e) {
-      socketSim.log('CLIENT', '连接服务器失败', 'ERROR');
+      setIsConnected(false);
+      setKeyLoading(false);
+      socketSim.log('CLIENT', '连接服务器失败', 'Error');  // 修复: ERROR -> Error
     }
   }, []);
 
-  // 请求服务端加密
   const encryptWithServer = async (value: number): Promise<string | null> => {
     return new Promise((resolve) => {
+      let resolved = false;
+      
       const handler = (data: any) => {
         if (data.type === 'ENCRYPTED_VALUE' && data.original === value. toString()) {
-          resolve(data.ciphertext);
+          if (!resolved) {
+            resolved = true;
+            resolve(data.ciphertext);
+          }
         }
       };
-      socketSim. onMessage(handler);
+      
+      socketSim.onMessage(handler);
       socketSim.send({ type: 'ENCRYPT_VALUE', value: value });
       
-      // 超时处理
-      setTimeout(() => resolve(null), 10000);
+      setTimeout(() => {
+        if (! resolved) {
+          resolved = true;
+          resolve(null);
+        }
+      }, 10000);
     });
   };
 
   useEffect(() => {
-    // 监听服务端消息
-    socketSim.onMessage((data) => {
+    const messageHandler = (data: any) => {
       if (data. type === 'PAILLIER_KEY') {
         setServerPubKey(data.pub_key);
         setKeyInfo(data.key_info);
         setCountdown(data.key_info?. remaining_seconds || 0);
         setKeyLoading(false);
-        socketSim.log('SERVER', '收到服务端公钥', 'DATA', `N长度: ${data. pub_key.n. length} 位`);
-        
-        // 密钥更新时清空之前的加密数据
-        if (dataPackets.length > 0) {
-          socketSim.log('CLIENT', '密钥已更新，之前的加密数据已失效', 'WARN');
-        }
+        setIsConnected(true);
+        socketSim.log('SERVER', '收到服务端公钥', 'DATA', `N长度: ${data. pub_key.n.length} 位`);
       }
       
       if (data.type === 'KEY_ROTATED') {
         setServerPubKey(data.pub_key);
         setKeyInfo(data.key_info);
         setCountdown(data. key_info?.remaining_seconds || 0);
-        // 清空旧数据
         setDataPackets([]);
         setCloudResult(null);
         setDecryptedSum(null);
@@ -98,7 +102,7 @@ const PrivacyComputing: React.FC = () => {
         if (data.plaintext !== undefined) {
           setDecryptedSum(data.plaintext);
         }
-        socketSim. log('SERVER', '收到云端计算结果', 'DATA');
+        socketSim.log('SERVER', '收到云端计算结果', 'DATA');
       }
       
       if (data.type === 'COMPUTE_RESULT') {
@@ -107,43 +111,46 @@ const PrivacyComputing: React.FC = () => {
         socketSim.log('SERVER', '收到云端计算结果', 'DATA');
       }
 
-      if (data. type === 'ENCRYPTED_VALUE') {
-        socketSim.log('SERVER', `加密完成`, 'DATA');
+      if (data.type === 'ENCRYPTED_VALUE') {
+        socketSim.log('SERVER', '加密完成', 'DATA');
       }
-    });
 
-    // 初始获取密钥
+      if (data. type === 'DECRYPTED_VALUE') {
+        setDecryptedSum(data.plaintext);
+        socketSim.log('SERVER', `解密结果: ${data. plaintext}`, 'DATA');
+      }
+    };
+
+    socketSim. onMessage(messageHandler);
     fetchServerKey();
 
-    // 倒计时定时器
     const countdownTimer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          // 倒计时结束，请求新密钥
-          fetchServerKey();
+          if (isConnected) {
+            fetchServerKey();
+          }
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
-    // 更新当前时间
     const timeTimer = setInterval(() => {
-      setCurrentTime(new Date(). toLocaleString('zh-CN'));
+      setCurrentTime(new Date().toLocaleString('zh-CN'));
     }, 1000);
 
     return () => {
       clearInterval(countdownTimer);
       clearInterval(timeTimer);
     };
-  }, [fetchServerKey]);
+  }, [fetchServerKey, isConnected]);
 
   const handleEncryptAndStore = async () => {
     const num = parseInt(inputVal);
     if (isNaN(num)) return;
 
     if (useServerKey && serverPubKey) {
-      // 使用服务端加密
       socketSim.log('CLIENT', `请求加密数值: ${num}`, 'INFO');
       const ciphertext = await encryptWithServer(num);
       
@@ -156,12 +163,10 @@ const PrivacyComputing: React.FC = () => {
         setDataPackets(prev => [...prev, packet]);
         socketSim.log('CLIENT', `加密成功，密文长度: ${ciphertext.length}`, 'INFO');
       } else {
-        socketSim.log('CLIENT', '加密超时', 'ERROR');
+        socketSim. log('CLIENT', '加密超时', 'Error');  // 修复: ERROR -> Error
       }
     } else {
-      // 使用本地加密（需要导入 paillier 库）
-      // const ciphertext = paillier. encrypt(num);
-      socketSim.log('CLIENT', '本地加密模式暂不可用', 'ERROR');
+      socketSim.log('CLIENT', '本地加密模式暂不可用', 'Error');  // 修复: ERROR -> Error
     }
     
     setInputVal('');
@@ -173,19 +178,22 @@ const PrivacyComputing: React.FC = () => {
     setCloudResult(null);
     setDecryptedSum(null);
 
-    await socketSim.connect(). catch(() => {});
+    try {
+      await socketSim.connect();
+    } catch (e) {
+      setProcessing(false);
+      return;
+    }
 
     socketSim.log('CLIENT', `发送 ${dataPackets.length} 条密文到云端求和`, 'DATA');
     
     if (useServerKey) {
-      // 使用服务端密钥模式
       socketSim.send({
         type: 'COMPUTE_SUM_SERVER_KEY',
         values: dataPackets. map(p => p.ciphertext),
         return_plaintext: true
       });
     } else {
-      // 使用前端密钥模式（保留兼容）
       socketSim.send({
         type: 'COMPUTE_SUM',
         pub_key: serverPubKey,
@@ -196,9 +204,8 @@ const PrivacyComputing: React.FC = () => {
 
   const handleDecryptResult = () => {
     if (! cloudResult) return;
-    // 服务端密钥模式下，解密在服务端完成
     if (useServerKey) {
-      socketSim.send({
+      socketSim. send({
         type: 'DECRYPT_VALUE',
         ciphertext: cloudResult
       });
@@ -218,7 +225,9 @@ const PrivacyComputing: React.FC = () => {
             <div className="h-4 w-px bg-cyber-600"></div>
             <div className="text-cyber-dim text-sm">
               <span className="text-gray-400">密钥生成于:</span>
-              <span className="text-cyber-accent ml-2 font-mono">{keyInfo?.generated_at || '加载中.. .'}</span>
+              <span className="text-cyber-accent ml-2 font-mono">
+                {keyInfo?.generated_at || (keyLoading ? '加载中.. .' : '未连接')}
+              </span>
             </div>
           </div>
           
@@ -226,15 +235,15 @@ const PrivacyComputing: React.FC = () => {
             <div className="text-sm">
               <span className="text-gray-400">下次轮换倒计时:</span>
               <span className={`ml-2 font-mono font-bold text-lg ${countdown < 60 ? 'text-red-400 animate-pulse' : 'text-green-400'}`}>
-                {formatCountdown(countdown)}
+                {isConnected ? formatCountdown(countdown) : '--:--'}
               </span>
             </div>
             <button
               onClick={fetchServerKey}
               disabled={keyLoading}
-              className="px-3 py-1 bg-cyber-600 hover:bg-cyber-500 text-white rounded text-sm transition-colors"
+              className="px-3 py-1 bg-cyber-600 hover:bg-cyber-500 text-white rounded text-sm transition-colors disabled:opacity-50"
             >
-              {keyLoading ? '加载中...' : '刷新密钥'}
+              {keyLoading ?  '连接中...' : (isConnected ? '刷新密钥' : '连接服务器')}
             </button>
           </div>
         </div>
@@ -243,7 +252,7 @@ const PrivacyComputing: React.FC = () => {
         <div className="mt-3 h-1 bg-cyber-700 rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-cyber-accent to-green-400 transition-all duration-1000"
-            style={{ width: `${(countdown / (keyInfo?.rotation_interval || 300)) * 100}%` }}
+            style={{ width: `${isConnected ? (countdown / (keyInfo?.rotation_interval || 300)) * 100 : 0}%` }}
           ></div>
         </div>
       </div>
@@ -264,7 +273,7 @@ const PrivacyComputing: React.FC = () => {
                 className="sr-only"
               />
               <div className={`w-10 h-5 rounded-full transition-colors ${useServerKey ? 'bg-cyber-accent' : 'bg-gray-600'}`}>
-                <div className={`w-4 h-4 rounded-full bg-white transform transition-transform mt-0.5 ${useServerKey ? 'translate-x-5' : 'translate-x-1'}`}></div>
+                <div className={`w-4 h-4 rounded-full bg-white transform transition-transform mt-0.5 ${useServerKey ?  'translate-x-5' : 'translate-x-1'}`}></div>
               </div>
               <span className="ml-2 text-sm text-gray-300">
                 {useServerKey ? '服务端密钥 (2048位)' : '本地密钥 (演示)'}
@@ -282,7 +291,7 @@ const PrivacyComputing: React.FC = () => {
             />
             <button 
               onClick={handleEncryptAndStore} 
-              disabled={!serverPubKey && useServerKey}
+              disabled={(! serverPubKey && useServerKey) || ! isConnected}
               className="bg-cyber-500 hover:bg-cyber-400 text-white px-4 py-2 rounded font-semibold transition-colors border border-cyber-500 disabled:opacity-50"
             >
               加密并添加
@@ -290,14 +299,16 @@ const PrivacyComputing: React.FC = () => {
           </div>
           
           <div className="bg-cyber-900 rounded p-4 h-48 overflow-y-auto border border-cyber-700">
-            {dataPackets.length === 0 ? (
-              <div className="text-gray-500 text-center py-8">暂无数据，请输入数值并加密</div>
+            {dataPackets.length === 0 ?  (
+              <div className="text-gray-500 text-center py-8">
+                {isConnected ? '暂无数据，请输入数值并加密' : '请先连接服务器'}
+              </div>
             ) : (
               dataPackets.map((pkt) => (
                 <div key={pkt.id} className="grid grid-cols-3 gap-2 text-xs font-mono border-b border-cyber-800 py-2 hover:bg-cyber-800">
                   <span className="text-gray-400">{pkt.id}</span>
                   <span className="text-green-400">{pkt.originalValue}</span>
-                  <span className="text-gray-500 truncate">{pkt.ciphertext. substring(0, 15)}...</span>
+                  <span className="text-gray-500 truncate">{pkt.ciphertext. substring(0, 15)}... </span>
                 </div>
               ))
             )}
@@ -310,19 +321,19 @@ const PrivacyComputing: React.FC = () => {
             <div className="p-2 bg-cyber-900 rounded">
               <div className="text-cyber-dim text-xs">模数 N (长度)</div>
               <div className="text-cyber-accent font-mono">
-                {serverPubKey ?  `${serverPubKey.n.length} 位数字` : '加载中...'}
+                {serverPubKey ?  `${serverPubKey.n.length} 位数字` : (isConnected ? '加载中...' : '未连接')}
               </div>
             </div>
             <div className="p-2 bg-cyber-900 rounded">
               <div className="text-cyber-dim text-xs">N 前20位</div>
               <div className="text-cyber-accent font-mono text-sm truncate">
-                {serverPubKey ?  serverPubKey. n.substring(0, 20) + '...' : '加载中...'}
+                {serverPubKey ? serverPubKey.n.substring(0, 20) + '...' : (isConnected ? '加载中...' : '未连接')}
               </div>
             </div>
             <div className="p-2 bg-cyber-900 rounded">
               <div className="text-cyber-dim text-xs">密钥强度</div>
               <div className="text-green-400 font-mono font-bold">
-                {serverPubKey ? '2048 bits (安全)' : '加载中...'}
+                {serverPubKey ? '2048 bits (安全)' : (isConnected ? '加载中...' : '未连接')}
               </div>
             </div>
           </div>
@@ -332,12 +343,12 @@ const PrivacyComputing: React.FC = () => {
       <div className="flex justify-center my-4">
         <button
           onClick={handleOutsourceCalculation}
-          disabled={processing || dataPackets.length === 0}
+          disabled={processing || dataPackets.length === 0 || !isConnected}
           className={`px-8 py-4 rounded-full font-bold text-lg shadow-lg transition-all transform hover:scale-105 ${
             processing ?  'bg-cyber-700 text-gray-400' : 'bg-cyber-accent text-cyber-900 hover:bg-white'
-          }`}
+          } disabled:opacity-50 disabled:hover:scale-100`}
         >
-          {processing ? "云端计算中..." : "发起安全云端外包计算"}
+          {processing ?  "云端计算中..." : "发起安全云端外包计算"}
         </button>
       </div>
 
@@ -345,9 +356,9 @@ const PrivacyComputing: React.FC = () => {
         <div className="bg-gradient-to-r from-cyber-800 to-cyber-900 rounded-lg p-6 border border-cyber-500 shadow-lg text-center">
           <h3 className="text-xl font-bold text-white mb-4">收到云端结果</h3>
           <div className="bg-black/50 p-3 rounded font-mono text-xs break-all border border-cyber-700 mb-4 text-yellow-500 max-h-24 overflow-auto">
-            {cloudResult ?  cloudResult. substring(0, 200) + (cloudResult.length > 200 ? '...' : '') : '等待中...'}
+            {cloudResult ? cloudResult. substring(0, 200) + (cloudResult.length > 200 ? '...' : '') : '等待中...'}
           </div>
-          {decryptedSum === null ? (
+          {decryptedSum === null ?  (
             <button 
               onClick={handleDecryptResult} 
               className="px-6 py-2 border-2 border-cyber-accent text-cyber-accent rounded hover:bg-cyber-accent hover:text-cyber-900 transition-colors uppercase font-bold"
