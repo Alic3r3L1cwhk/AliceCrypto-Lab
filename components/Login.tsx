@@ -1,12 +1,13 @@
+// Login.tsx - 更新版本
 import React, { useState } from 'react';
 import { Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
+import { getHttpUrl } from '../config';  // 改为上一级目录
 
 interface LoginProps {
-  onLoginSuccess: (sessionToken: string, username: string) => void;
-  wsUrl: string;
+  onLoginSuccess: (token: string, username: string) => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess, wsUrl }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true); // true: 登录模式，false: 注册模式
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -16,6 +17,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, wsUrl }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // 处理表单提交
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -23,61 +25,96 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, wsUrl }) => {
     setLoading(true);
 
     try {
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        const messageType = isLogin ? 'LOGIN' : 'REGISTER';
-        const payload: any = {
-          type: messageType,
-          username,
-          password,
-        };
-
-        if (!isLogin) {
-          payload.email = email;
-        }
-
-        ws.send(JSON.stringify(payload));
-      };
-
-      ws.onmessage = (event) => {
-        const response = JSON.parse(event.data);
-        const responseType = isLogin ? 'LOGIN_RESPONSE' : 'REGISTER_RESPONSE';
-
-        if (response.type === responseType) {
-          if (response.success) {
-            if (isLogin) {
-              setSuccess('登录成功！');
-              setTimeout(() => {
-                onLoginSuccess(response.session_token, username);
-              }, 500);
-            } else {
-              setSuccess('注册成功！请使用新账号登录');
-              // 自动切换到登录模式
-              setTimeout(() => {
-                setIsLogin(true);
-                setPassword('');
-                setEmail('');
-              }, 1500);
-            }
-          } else {
-            setError(response.message || '操作失败');
-          }
-          ws.close();
-        }
-      };
-
-      ws.onerror = () => {
-        setError('连接服务器失败，请检查网络连接');
-        setLoading(false);
-      };
-
-      ws.onclose = () => {
-        setLoading(false);
-      };
+      if (isLogin) {
+        // 登录请求
+        await handleLogin();
+      } else {
+        // 注册请求
+        await handleRegister();
+      }
     } catch (err) {
+      console.error('操作失败:', err);
       setError('操作失败，请稍后重试');
+    } finally {
       setLoading(false);
+    }
+  };
+
+  // 处理登录
+  const handleLogin = async () => {
+    if (!username || !password) {
+      setError('请输入用户名和密码');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${getHttpUrl()}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSuccess('登录成功！');
+        // 短暂延迟后触发成功回调
+        setTimeout(() => {
+          onLoginSuccess(data.token, data.user.username);
+        }, 500);
+      } else {
+        setError(data.error || '登录失败');
+      }
+    } catch (err) {
+      console.error('登录错误:', err);
+      setError('连接服务器失败，请检查网络连接');
+    }
+  };
+
+  // 处理注册
+  const handleRegister = async () => {
+    // 验证输入
+    if (!username || !password) {
+      setError('请填写用户名和密码');
+      return;
+    }
+
+    if (!isLogin && password.length < 6) {
+      setError('密码长度至少6位');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${getHttpUrl()}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          username, 
+          email: email || undefined, // 可选字段
+          password 
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok || response.status === 201) {
+        setSuccess('注册成功！请使用新账号登录');
+        // 自动切换到登录模式
+        setTimeout(() => {
+          setIsLogin(true);
+          setPassword('');
+          setEmail('');
+        }, 1500);
+      } else {
+        setError(data.error || '注册失败');
+      }
+    } catch (err) {
+      console.error('注册错误:', err);
+      setError('连接服务器失败，请检查网络连接');
     }
   };
 
@@ -185,7 +222,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, wsUrl }) => {
             {/* 提交按钮 */}
             <button
               type="submit"
-              disabled={loading || !username || !password || (!isLogin && !email && email !== '')}
+              disabled={loading || !username || !password}
               className="w-full bg-gradient-to-r from-cyber-accent to-blue-500 hover:from-cyber-accent/80 hover:to-blue-500/80 text-cyber-900 font-bold py-2 px-4 rounded transition disabled:opacity-50 disabled:cursor-not-allowed mt-6"
             >
               {loading ? (
@@ -227,6 +264,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, wsUrl }) => {
                   setError('');
                   setSuccess('');
                   setPassword('');
+                  setEmail('');
                 }}
                 disabled={loading}
                 className="ml-2 text-cyber-accent hover:text-cyber-accent/80 font-medium transition disabled:opacity-50"
@@ -235,11 +273,20 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, wsUrl }) => {
               </button>
             </p>
           </div>
+
+          {/* 连接状态提示 */}
+          <div className="mt-4 text-center">
+            <div className="inline-flex items-center px-3 py-1 rounded-full bg-cyber-900/50 text-xs text-cyber-dim">
+              <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
+              后端服务: {getHttpUrl()}
+            </div>
+          </div>
         </div>
 
         {/* 底部提示 */}
         <div className="mt-6 text-center text-xs text-cyber-dim">
           <p>🔐 安全密钥基础设施 - 所有通信已加密</p>
+          <p className="mt-1">API 端点: {getHttpUrl()}/api/health</p>
         </div>
       </div>
     </div>
