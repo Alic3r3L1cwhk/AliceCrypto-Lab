@@ -55,6 +55,8 @@ cd backend
 python -m venv .venv && .venv\Scripts\activate  # Windows 示例，可自行选择环境
 pip install -r requirements.txt
 python main.py  # 默认监听 0.0.0.0:8080，并输出 backend.log
+# 或
+nohup python3 main.py > backend.log 2>&1 & # 后台运行
 ```
 
 ### 2. 前端（Vite）
@@ -64,6 +66,8 @@ npm install
 npm run dev     # 开发模式
 # 或
 npm run build && npm run preview
+# 或
+nohup npm run preview > frontend.log 2>&1 & # 后台运行
 ```
 
 默认前端运行在 `http://localhost:5173/`（dev）或 `http://localhost:4173/`（preview）。如需对外访问，可通过 nginx 或 `npm run preview -- --host` 暴露。
