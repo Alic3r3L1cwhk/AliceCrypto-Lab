@@ -1,11 +1,13 @@
 
 // === 服务器配置 ===
 
-// 你的服务器公网 IP
-export const SERVER_HOST = 'localhost'; 
+//*修改服务ip地址
+export const SERVER_HOST = 'localhost';
 
 export const SERVER_PORT = 8080;
 export const HTTP_PORT = 8081;
+
+const API_PROTOCOL = (import.meta as any)?.env?.VITE_API_PROTOCOL || 'http:';
 
 export const getWsUrl = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -15,6 +17,6 @@ export const getWsUrl = () => {
 };
 
 export const getHttpUrl = () => {
-  const protocol = window.location.protocol;
+  const protocol = API_PROTOCOL.endsWith(':') ? API_PROTOCOL : `${API_PROTOCOL}:`;
   return `${protocol}//${SERVER_HOST}:${HTTP_PORT}`;
 };

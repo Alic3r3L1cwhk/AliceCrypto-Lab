@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import secrets
 import sys
 from datetime import datetime
@@ -445,11 +446,24 @@ if HAS_AIOHTTP:
             else:
                 resp = await handler(request)
 
-            # 允许的来源（开发时使用 localhost:3000），也可以改为 '*'（生产请限定域名）
-            resp.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+            request_origin = request.headers.get('Origin')
+            allowed_origins = [
+                origin.strip()
+                for origin in os.getenv('ALLOWED_ORIGINS', '').split(',')
+                if origin.strip()
+            ]
+
+            if allowed_origins:
+                allow_origin = request_origin if request_origin in allowed_origins else allowed_origins[0]
+            else:
+                # 默认允许当前请求来源；若无 Origin 则回退为 *
+                allow_origin = request_origin or '*'
+
+            resp.headers['Access-Control-Allow-Origin'] = allow_origin
             resp.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
             resp.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
             resp.headers['Access-Control-Allow-Credentials'] = 'true'
+            resp.headers['Vary'] = 'Origin'
             return resp
 
         app = web.Application(middlewares=[cors_middleware])
