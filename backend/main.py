@@ -113,24 +113,15 @@ async def handler(websocket: WebSocketServerProtocol) -> None:
                     )
 
                 elif msg_type == "BATCH_ENCRYPT":
-                    algorithm = data.get("algorithm", "PAILLIER")
-                    values = data.get("values") or []
-                    try:
-                        items = fhe_manager.encrypt_batch(algorithm, values)
-                        await websocket.send(
-                            json.dumps(
-                                {
-                                    "type": "ENCRYPTED_BATCH",
-                                    "algorithm": algorithm,
-                                    "items": items,
-                                }
-                            )
+                    await websocket.send(
+                        json.dumps(
+                            {
+                                "type": "FHE_ERROR",
+                                "error": "明文加密已禁用，请在前端使用公钥加密后仅上传密文",
+                            }
                         )
-                        logger.info("完成 %s 批量加密 (%d)", algorithm, len(items))
-                    except Exception as exc:  # noqa: BLE001
-                        await websocket.send(
-                            json.dumps({"type": "FHE_ERROR", "error": str(exc)})
-                        )
+                    )
+                    logger.warning("拒绝明文加密请求 (BATCH_ENCRYPT)")
 
                 elif msg_type == "COMPUTE_FHE":
                     algorithm = data.get("algorithm", "PAILLIER")
