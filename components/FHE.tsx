@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { socketSim } from '../lib/socketSim';
+import { encryptElGamal, encryptPaillier, encryptRSA } from '../lib/fheClient';
 import { EncryptedDataPacket, FHEAlgorithm, KeyInfo, ServerPublicKey } from '../types';
 
 const formatCountdown = (totalSeconds: number) => {
@@ -160,15 +161,22 @@ const FHE: React.FC = () => {
 
   // 批量随机加密
   const handleBatchEncrypt = async () => {
-    if (!isConnected) return;
+    if (!isConnected || !serverPubKey) return;
     setIsEncrypting(true);
-    const randomValues = Array.from({ length: 5 }, () => Math.floor(Math.random() * 10) + 1); // 生成1-10的随机数避免乘法溢出太大
-    socketSim.log('CLIENT', `请求批量加密: [${randomValues.join(', ')}]`, 'INFO');
-    socketSim.send({
-      type: 'BATCH_ENCRYPT',
-      values: randomValues,
-      algorithm: algorithm
-    });
+    try {
+      const randomValues = Array.from({ length: 5 }, () => Math.floor(Math.random() * 10) + 1); // 生成1-10的随机数避免乘法溢出太大
+      const packets = randomValues.map(val => ({
+        id: Math.random().toString(36).substr(2, 5).toUpperCase(),
+        originalValue: val,
+        ciphertext: encryptLocal(val)
+      }));
+      setDataPackets(prev => [...prev, ...packets]);
+      socketSim.log('CLIENT', `本地加密完成 (${algorithm})，共 ${packets.length} 个`, 'INFO');
+    } catch (err: any) {
+      socketSim.log('CLIENT', err?.message || '本地加密失败', 'Error');
+    } finally {
+      setIsEncrypting(false);
+    }
   };
 
   // 单个加密
@@ -176,14 +184,41 @@ const FHE: React.FC = () => {
     if (!inputVal) return;
     const num = parseInt(inputVal);
     if (isNaN(num)) return;
+    if (!serverPubKey) {
+      socketSim.log('CLIENT', '尚未获取公钥，无法加密', 'Error');
+      return;
+    }
+
     setIsEncrypting(true);
-    socketSim.send({
-      type: 'BATCH_ENCRYPT',
-      values: [num],
-      algorithm: algorithm
-    });
-    setInputVal('');
+    try {
+      const ciphertext = encryptLocal(num);
+      const packet: EncryptedDataPacket = {
+        id: Math.random().toString(36).substr(2, 5).toUpperCase(),
+        originalValue: num,
+        ciphertext
+      };
+      setDataPackets(prev => [...prev, packet]);
+      socketSim.log('CLIENT', `本地加密完成 (${algorithm})`, 'INFO');
+    } catch (err: any) {
+      socketSim.log('CLIENT', err?.message || '本地加密失败', 'Error');
+    } finally {
+      setIsEncrypting(false);
+      setInputVal('');
+    }
   }
+
+  const encryptLocal = (val: number): string => {
+    switch (algorithm) {
+      case 'PAILLIER':
+        return encryptPaillier(val, serverPubKey!);
+      case 'RSA':
+        return encryptRSA(val, serverPubKey!);
+      case 'ELGAMAL':
+        return encryptElGamal(val, serverPubKey!);
+      default:
+        throw new Error(`不支持的算法: ${algorithm}`);
+    }
+  };
 
   // 全部计算
   const handleCompute = async () => {
