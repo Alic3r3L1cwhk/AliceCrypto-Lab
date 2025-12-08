@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { socketSim } from '../lib/socketSim';
+import { encryptPaillier } from '../lib/fheClient';
 import { EncryptedDataPacket } from '../types';
 
 interface KeyInfo {
@@ -33,7 +34,7 @@ const PrivacyComputing: React.FC = () => {
   const formatCountdown = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins. toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const fetchServerKey = useCallback(async () => {
@@ -41,8 +42,8 @@ const PrivacyComputing: React.FC = () => {
     try {
       await socketSim.connect();
       setIsConnected(true);
-      socketSim.send({ type: 'GET_PAILLIER_KEY' });
-      socketSim.log('CLIENT', '请求服务端 Paillier 公钥', 'INFO');
+      socketSim.send({ type: 'GET_FHE_KEY', algorithm: 'PAILLIER' });
+      socketSim.log('CLIENT', '请求 Paillier 公钥 (仅本地加密)', 'INFO');
     } catch (e) {
       setIsConnected(false);
       setKeyLoading(false);
@@ -50,74 +51,50 @@ const PrivacyComputing: React.FC = () => {
     }
   }, []);
 
-  const encryptWithServer = async (value: number): Promise<string | null> => {
-    return new Promise((resolve) => {
-      let resolved = false;
-      
-      const handler = (data: any) => {
-        if (data.type === 'ENCRYPTED_VALUE' && data.original === value. toString()) {
-          if (!resolved) {
-            resolved = true;
-            resolve(data.ciphertext);
-          }
-        }
-      };
-      
-      socketSim.onMessage(handler);
-      socketSim.send({ type: 'ENCRYPT_VALUE', value: value });
-      
-      setTimeout(() => {
-        if (! resolved) {
-          resolved = true;
-          resolve(null);
-        }
-      }, 10000);
-    });
+  const encryptLocal = (value: number): string => {
+    if (!serverPubKey) throw new Error('未获取到 Paillier 公钥');
+    return encryptPaillier(value, serverPubKey);
   };
 
   useEffect(() => {
     const messageHandler = (data: any) => {
-      if (data. type === 'PAILLIER_KEY') {
+      if (data.type === 'FHE_KEY' && data.algorithm === 'PAILLIER') {
         setServerPubKey(data.pub_key);
         setKeyInfo(data.key_info);
-        setCountdown(data.key_info?. remaining_seconds || 0);
+        setCountdown(data.key_info?.remaining_seconds || 0);
         setKeyLoading(false);
         setIsConnected(true);
-        socketSim.log('SERVER', '收到服务端公钥', 'DATA', `N长度: ${data. pub_key.n.length} 位`);
+        socketSim.log('SERVER', '收到 Paillier 公钥', 'DATA', `N长度: ${data.pub_key.n.length} 位`);
       }
-      
+
       if (data.type === 'KEY_ROTATED') {
-        setServerPubKey(data.pub_key);
-        setKeyInfo(data.key_info);
-        setCountdown(data. key_info?.remaining_seconds || 0);
+        const bundle = data.keys?.PAILLIER;
+        if (bundle) {
+          setServerPubKey(bundle.pub_key);
+          setKeyInfo(bundle.key_info);
+          setCountdown(bundle.key_info?.remaining_seconds || 0);
+        }
         setDataPackets([]);
         setCloudResult(null);
         setDecryptedSum(null);
         socketSim.log('SERVER', '🔄 密钥已轮换，数据已重置', 'WARN');
       }
-      
-      if (data.type === 'COMPUTE_RESULT_SERVER_KEY') {
+
+      if (data.type === 'COMPUTE_RESULT') {
         setProcessing(false);
-        setCloudResult(data.ciphertext);
+        setCloudResult(data.ciphertext || data.result);
         if (data.plaintext !== undefined) {
           setDecryptedSum(data.plaintext);
         }
         socketSim.log('SERVER', '收到云端计算结果', 'DATA');
       }
-      
-      if (data.type === 'COMPUTE_RESULT') {
-        setProcessing(false);
-        setCloudResult(data.result);
-        socketSim.log('SERVER', '收到云端计算结果', 'DATA');
-      }
 
-      if (data.type === 'ENCRYPTED_VALUE') {
-        socketSim.log('SERVER', '加密完成', 'DATA');
-      }
-
-      if (data. type === 'DECRYPTED_VALUE') {
-        setDecryptedSum(data.plaintext);
-        socketSim.log('SERVER', `解密结果: ${data. plaintext}`, 'DATA');
+      if (data.type === 'SERVER_TIME') {
+        if (data.keys?.PAILLIER) {
+          setServerPubKey(data.keys.PAILLIER.pub_key);
+          setKeyInfo(data.keys.PAILLIER.key_info);
+          setCountdown(data.keys.PAILLIER.key_info?.remaining_seconds || 0);
+        }
       }
     };
 
@@ -150,23 +127,17 @@ const PrivacyComputing: React.FC = () => {
     const num = parseInt(inputVal);
     if (isNaN(num)) return;
 
-    if (useServerKey && serverPubKey) {
-      socketSim.log('CLIENT', `请求加密数值: ${num}`, 'INFO');
-      const ciphertext = await encryptWithServer(num);
-      
-      if (ciphertext) {
-        const packet: EncryptedDataPacket = {
-          id: Math.random().toString(36).substr(2, 5),
-          originalValue: num,
-          ciphertext: ciphertext
-        };
-        setDataPackets(prev => [...prev, packet]);
-        socketSim.log('CLIENT', `加密成功，密文长度: ${ciphertext.length}`, 'INFO');
-      } else {
-        socketSim. log('CLIENT', '加密超时', 'Error');  // 修复: ERROR -> Error
-      }
-    } else {
-      socketSim.log('CLIENT', '本地加密模式暂不可用', 'Error');  // 修复: ERROR -> Error
+    try {
+      const ciphertext = encryptLocal(num);
+      const packet: EncryptedDataPacket = {
+        id: Math.random().toString(36).substr(2, 5),
+        originalValue: num,
+        ciphertext
+      };
+      setDataPackets(prev => [...prev, packet]);
+      socketSim.log('CLIENT', `本地加密成功，密文长度: ${ciphertext.length}`, 'INFO');
+    } catch (err: any) {
+      socketSim.log('CLIENT', err?.message || '加密失败', 'Error');
     }
     
     setInputVal('');
@@ -186,30 +157,11 @@ const PrivacyComputing: React.FC = () => {
     }
 
     socketSim.log('CLIENT', `发送 ${dataPackets.length} 条密文到云端求和`, 'DATA');
-    
-    if (useServerKey) {
-      socketSim.send({
-        type: 'COMPUTE_SUM_SERVER_KEY',
-        values: dataPackets. map(p => p.ciphertext),
-        return_plaintext: true
-      });
-    } else {
-      socketSim.send({
-        type: 'COMPUTE_SUM',
-        pub_key: serverPubKey,
-        values: dataPackets.map(p => p.ciphertext)
-      });
-    }
-  };
-
-  const handleDecryptResult = () => {
-    if (! cloudResult) return;
-    if (useServerKey) {
-      socketSim. send({
-        type: 'DECRYPT_VALUE',
-        ciphertext: cloudResult
-      });
-    }
+    socketSim.send({
+      type: 'COMPUTE_FHE',
+      algorithm: 'PAILLIER',
+      ciphertexts: dataPackets.map(p => p.ciphertext)
+    });
   };
 
   return (
