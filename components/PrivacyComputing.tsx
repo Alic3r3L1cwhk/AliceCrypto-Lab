@@ -22,7 +22,7 @@ const PrivacyComputing: React.FC = () => {
   const [cloudResult, setCloudResult] = useState<string | null>(null);
   const [decryptedSum, setDecryptedSum] = useState<number | null>(null);
   const [processing, setProcessing] = useState(false);
-  
+
   const [serverPubKey, setServerPubKey] = useState<ServerPublicKey | null>(null);
   const [keyInfo, setKeyInfo] = useState<KeyInfo | null>(null);
   const [countdown, setCountdown] = useState<number>(0);
@@ -98,7 +98,7 @@ const PrivacyComputing: React.FC = () => {
       }
     };
 
-    socketSim. onMessage(messageHandler);
+    socketSim.onMessage(messageHandler);
     fetchServerKey();
 
     const countdownTimer = setInterval(() => {
@@ -139,7 +139,7 @@ const PrivacyComputing: React.FC = () => {
     } catch (err: any) {
       socketSim.log('CLIENT', err?.message || '加密失败', 'Error');
     }
-    
+
     setInputVal('');
   };
 
@@ -182,7 +182,7 @@ const PrivacyComputing: React.FC = () => {
               </span>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="text-sm">
               <span className="text-gray-400">下次轮换倒计时:</span>
@@ -195,14 +195,14 @@ const PrivacyComputing: React.FC = () => {
               disabled={keyLoading}
               className="px-3 py-1 bg-cyber-600 hover:bg-cyber-500 text-white rounded text-sm transition-colors disabled:opacity-50"
             >
-              {keyLoading ?  '连接中...' : (isConnected ? '刷新密钥' : '连接服务器')}
+              {keyLoading ? '连接中...' : (isConnected ? '刷新密钥' : '连接服务器')}
             </button>
           </div>
         </div>
-        
+
         {/* 进度条 */}
         <div className="mt-3 h-1 bg-cyber-700 rounded-full overflow-hidden">
-          <div 
+          <div
             className="h-full bg-gradient-to-r from-cyber-accent to-green-400 transition-all duration-1000"
             style={{ width: `${isConnected ? (countdown / (keyInfo?.rotation_interval || 300)) * 100 : 0}%` }}
           ></div>
@@ -214,7 +214,7 @@ const PrivacyComputing: React.FC = () => {
           <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
             <span className="text-cyber-accent">01. </span> 数据输入
           </h3>
-          
+
           {/* 模式切换 */}
           <div className="mb-4 flex items-center gap-2">
             <label className="flex items-center cursor-pointer">
@@ -225,14 +225,14 @@ const PrivacyComputing: React.FC = () => {
                 className="sr-only"
               />
               <div className={`w-10 h-5 rounded-full transition-colors ${useServerKey ? 'bg-cyber-accent' : 'bg-gray-600'}`}>
-                <div className={`w-4 h-4 rounded-full bg-white transform transition-transform mt-0.5 ${useServerKey ?  'translate-x-5' : 'translate-x-1'}`}></div>
+                <div className={`w-4 h-4 rounded-full bg-white transform transition-transform mt-0.5 ${useServerKey ? 'translate-x-5' : 'translate-x-1'}`}></div>
               </div>
               <span className="ml-2 text-sm text-gray-300">
                 {useServerKey ? '服务端密钥 (2048位)' : '本地密钥 (演示)'}
               </span>
             </label>
           </div>
-          
+
           <div className="flex gap-2 mb-6">
             <input
               type="number"
@@ -241,17 +241,17 @@ const PrivacyComputing: React.FC = () => {
               placeholder="输入数值 (支持任意大小)"
               className="flex-1 bg-cyber-900 border border-cyber-600 rounded px-4 py-2 focus:outline-none focus:border-cyber-accent text-white"
             />
-            <button 
-              onClick={handleEncryptAndStore} 
-              disabled={(! serverPubKey && useServerKey) || ! isConnected}
+            <button
+              onClick={handleEncryptAndStore}
+              disabled={(!serverPubKey && useServerKey) || !isConnected}
               className="bg-cyber-500 hover:bg-cyber-400 text-white px-4 py-2 rounded font-semibold transition-colors border border-cyber-500 disabled:opacity-50"
             >
               加密并添加
             </button>
           </div>
-          
+
           <div className="bg-cyber-900 rounded p-4 h-48 overflow-y-auto border border-cyber-700">
-            {dataPackets.length === 0 ?  (
+            {dataPackets.length === 0 ? (
               <div className="text-gray-500 text-center py-8">
                 {isConnected ? '暂无数据，请输入数值并加密' : '请先连接服务器'}
               </div>
@@ -260,7 +260,7 @@ const PrivacyComputing: React.FC = () => {
                 <div key={pkt.id} className="grid grid-cols-3 gap-2 text-xs font-mono border-b border-cyber-800 py-2 hover:bg-cyber-800">
                   <span className="text-gray-400">{pkt.id}</span>
                   <span className="text-green-400">{pkt.originalValue}</span>
-                  <span className="text-gray-500 truncate">{pkt.ciphertext. substring(0, 15)}... </span>
+                  <span className="text-gray-500 truncate">{pkt.ciphertext.substring(0, 15)}... </span>
                 </div>
               ))
             )}
@@ -273,7 +273,7 @@ const PrivacyComputing: React.FC = () => {
             <div className="p-2 bg-cyber-900 rounded">
               <div className="text-cyber-dim text-xs">模数 N (长度)</div>
               <div className="text-cyber-accent font-mono">
-                {serverPubKey ?  `${serverPubKey.n.length} 位数字` : (isConnected ? '加载中...' : '未连接')}
+                {serverPubKey ? `${serverPubKey.n.length} 位数字` : (isConnected ? '加载中...' : '未连接')}
               </div>
             </div>
             <div className="p-2 bg-cyber-900 rounded">
@@ -296,11 +296,10 @@ const PrivacyComputing: React.FC = () => {
         <button
           onClick={handleOutsourceCalculation}
           disabled={processing || dataPackets.length === 0 || !isConnected}
-          className={`px-8 py-4 rounded-full font-bold text-lg shadow-lg transition-all transform hover:scale-105 ${
-            processing ?  'bg-cyber-700 text-gray-400' : 'bg-cyber-accent text-cyber-900 hover:bg-white'
-          } disabled:opacity-50 disabled:hover:scale-100`}
+          className={`px-8 py-4 rounded-full font-bold text-lg shadow-lg transition-all transform hover:scale-105 ${processing ? 'bg-cyber-700 text-gray-400' : 'bg-cyber-accent text-cyber-900 hover:bg-white'
+            } disabled:opacity-50 disabled:hover:scale-100`}
         >
-          {processing ?  "云端计算中..." : "发起安全云端外包计算"}
+          {processing ? "云端计算中..." : "发起安全云端外包计算"}
         </button>
       </div>
 
@@ -308,15 +307,10 @@ const PrivacyComputing: React.FC = () => {
         <div className="bg-gradient-to-r from-cyber-800 to-cyber-900 rounded-lg p-6 border border-cyber-500 shadow-lg text-center">
           <h3 className="text-xl font-bold text-white mb-4">收到云端结果</h3>
           <div className="bg-black/50 p-3 rounded font-mono text-xs break-all border border-cyber-700 mb-4 text-yellow-500 max-h-24 overflow-auto">
-            {cloudResult ? cloudResult. substring(0, 200) + (cloudResult.length > 200 ? '...' : '') : '等待中...'}
+            {cloudResult ? cloudResult.substring(0, 200) + (cloudResult.length > 200 ? '...' : '') : '等待中...'}
           </div>
           {decryptedSum === null ?  (
-            <button 
-              onClick={handleDecryptResult} 
-              className="px-6 py-2 border-2 border-cyber-accent text-cyber-accent rounded hover:bg-cyber-accent hover:text-cyber-900 transition-colors uppercase font-bold"
-            >
-              请求服务端解密
-            </button>
+            <div className="text-gray-400 text-sm">等待服务器返回明文结果...</div>
           ) : (
             <div className="text-4xl font-mono font-bold text-green-400 animate-pulse">
               {decryptedSum}
@@ -328,4 +322,4 @@ const PrivacyComputing: React.FC = () => {
   );
 };
 
-export default PrivacyComputing;
+export default PrivacyComputing;export default PrivacyComputing;
